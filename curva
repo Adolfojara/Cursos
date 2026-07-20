@@ -1,0 +1,118 @@
+## =========================================================
+## Curva de notas de un examen
+## Distribución de calificaciones + métodos de "curveo"
+## =========================================================
+
+# --- 1. Paquetes -------------------------------------------------
+if (!require(ggplot2)) install.packages("ggplot2")
+library(ggplot2)
+
+# --- 2. Datos ------------------------------------------------------
+# Reemplaza este vector con tus notas reales, o carga un CSV:
+notas <- read.csv("Downloads/notas.csv", sep = ";")$Notas
+
+notas
+df <- data.frame(nota = notas)
+
+
+# --- 3. Estadísticos descriptivos ----------------------------------
+media   <- mean(notas)
+mediana <- median(notas)
+desv    <- sd(notas)
+minimo  <- min(notas)
+maximo  <- max(notas)
+
+cat("Media:", round(media, 2),
+    "\nMediana:", round(mediana, 2),
+    "\nDesviación estándar:", round(desv, 2),
+    "\nMínimo:", minimo, " Máximo:", maximo, "\n")
+
+# --- 4. Histograma + curva de densidad (curva de notas "clásica") --
+p_hist <- ggplot(df, aes(x = nota)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 0.3,
+                 fill = "steelblue", color = "white", alpha = 0.8) +
+  geom_density(color = "darkred", linewidth = 1) +
+  geom_vline(xintercept = media, linetype = "dashed", color = "black") +
+  labs(title = "Curva de notas del examen",
+       subtitle = paste0("Media = ", round(media, 2),
+                         " | DE = ", round(desv, 2)),
+       x = "Nota", y = "Densidad") +
+  theme_minimal(base_size = 13)
+
+print(p_hist)
+
+# --- 5. Métodos de "curveo" (ajuste de notas) -----------------------
+# Escala de notas: ajusta según tu sistema (aquí 0-5, cambia a 0-100 si aplica)
+escala_max <- 5
+
+## a) Curva lineal (traslado): sumar puntos fijos a todos
+curva_lineal <- function(x, puntos = 0.5, tope = escala_max) {
+  pmin(x + puntos, tope)
+}
+
+## b) Curva de raíz cuadrada (común en escala 0-100; comprime hacia arriba)
+##    nota_nueva = sqrt(nota / max) * max
+curva_raiz <- function(x, tope = escala_max) {
+  sqrt(x / tope) * tope
+}
+
+notas_curveadas <- curva_raiz(notas)
+
+notas_curveadas
+
+comparacion <- data.frame(
+  original = notas,
+  curveada = round(curva_raiz(notas), 2)
+)
+
+#para ver la comparación
+
+notas_curva_raiz <- 
+  print(comparacion)
+
+#para ver los resultados en un excel
+
+library(writexl)
+
+# Supongamos que tienes tu data.frame con los resultados
+
+# Exportar a Excel
+write_xlsx(comparacion, "resultados_curveados.xlsx")
+
+## c) Curva por desviación estándar (normaliza hacia una media objetivo)
+curva_zscore <- function(x, media_objetivo = 3.5, de_objetivo = 0.8, tope = escala_max) {
+  z <- (x - mean(x)) / sd(x)
+  nueva <- media_objetivo + z * de_objetivo
+  pmin(pmax(nueva, 0), tope)  # recorta al rango [0, tope]
+}
+
+# --- 6. Aplicar y comparar métodos ----------------------------------
+df$lineal <- curva_lineal(df$nota)
+df$raiz   <- curva_raiz(df$nota)
+df$zscore <- curva_zscore(df$nota)
+
+resumen <- data.frame(
+  metodo = c("Original", "Lineal (+0.5)", "Raíz cuadrada", "Z-score (media 3.5)"),
+  media  = c(mean(df$nota), mean(df$lineal), mean(df$raiz), mean(df$zscore)),
+  de     = c(sd(df$nota), sd(df$lineal), sd(df$raiz), sd(df$zscore))
+)
+print(resumen)
+
+# --- 7. Gráfico comparativo de las curvas ---------------------------
+df_long <- data.frame(
+  nota   = c(df$nota, df$lineal, df$raiz, df$zscore),
+  metodo = rep(c("Original", "Lineal", "Raíz cuadrada", "Z-score"),
+               each = nrow(df))
+)
+
+p_comp <- ggplot(df_long, aes(x = nota, fill = metodo)) +
+  geom_density(alpha = 0.35) +
+  labs(title = "Comparación de métodos de curveo de notas",
+       x = "Nota", y = "Densidad", fill = "Método") +
+  theme_minimal(base_size = 13)
+
+print(p_comp)
+
+# --- 8. Exportar resultados (opcional) -------------------------------
+# write.csv(df, "notas_curveadas.csv", row.names = FALSE)
+# ggsave("curva_notas.png", p_hist, width = 7, height = 5)
